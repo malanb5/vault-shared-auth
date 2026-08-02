@@ -17,9 +17,12 @@ top-level `AGENTS.md` for why the exception is scoped to this package only.
   optional `household_id` / `household_role` / `household_allow_member_edit`.
 - `CoreVaultClient` (Protocol) / `HttpCoreVaultClient` — calls core-vault's
   `GET /auth/session` with a session cookie and/or a bearer token.
-- `core_vault_url()` / `home_vault_url()` — resolve the two workspace
-  services from `CORE_VAULT_URL` / `VAULT_PUBLIC_SCHEME` / `VAULT_PUBLIC_HOST`,
-  each with the same defaults every consumer already used.
+- `core_vault_url(default=...)` / `home_vault_url()` — resolve the two
+  workspace services from `CORE_VAULT_URL` / `VAULT_PUBLIC_SCHEME` /
+  `VAULT_PUBLIC_HOST`. `home_vault_url()`'s fallback (`100.104.3.103:8080`)
+  is consistent across every consumer; `core_vault_url()`'s fallback is
+  not — pass your app's own historical default explicitly (see Usage)
+  rather than relying on this function's built-in default.
 - `SharedSessionMiddleware` — a FastAPI/Starlette ASGI middleware that
   verifies the session cookie on every request, populates
   `request.state.owner_user_id` / `household_id` / `household_role` /
@@ -49,6 +52,19 @@ from vault_shared_auth import HttpCoreVaultClient
 
 client = HttpCoreVaultClient()
 session = await client.verify_session(cookie=raw_cookie)
+```
+
+If your app's historical `CORE_VAULT_URL` fallback isn't
+`http://127.0.0.1:8100`, pass it explicitly instead of relying on the
+package default:
+
+```python
+from vault_shared_auth import HttpCoreVaultClient, SharedSessionMiddleware, core_vault_url
+
+app.add_middleware(
+    SharedSessionMiddleware,
+    client=HttpCoreVaultClient(base_url=core_vault_url(default="http://100.104.3.103:8100")),
+)
 ```
 
 ## Versioning
