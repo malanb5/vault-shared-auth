@@ -30,6 +30,7 @@ def _build_app(session: SessionInfo | None) -> FastAPI:
     def whoami(request: Request):
         return {
             "owner_user_id": getattr(request.state, "owner_user_id", None),
+            "owner_email": getattr(request.state, "owner_email", None),
             "household_role": getattr(request.state, "household_role", None),
         }
 
@@ -63,6 +64,7 @@ def test_populates_request_state_when_authenticated(monkeypatch):
     assert response.status_code == 200
     body = response.json()
     assert body["owner_user_id"] == str(session.user_id)
+    assert body["owner_email"] == "owner@example.com"
     assert body["household_role"] == "admin"
 
 

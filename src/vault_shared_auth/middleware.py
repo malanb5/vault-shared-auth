@@ -49,6 +49,7 @@ class SharedSessionMiddleware:
         if identity:
             state = scope.setdefault("state", {})
             state["owner_user_id"] = str(identity.user_id)
+            state["owner_email"] = identity.email
             state["household_id"] = str(identity.household_id) if identity.household_id else None
             state["household_role"] = identity.household_role
             state["household_allow_member_edit"] = identity.household_allow_member_edit
