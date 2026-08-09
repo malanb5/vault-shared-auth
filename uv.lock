@@ -330,7 +330,7 @@ wheels = [
 
 [[package]]
 name = "vault-shared-auth"
-version = "0.4.0"
+version = "0.5.2"
 source = { editable = "." }
 dependencies = [
     { name = "fastapi" },

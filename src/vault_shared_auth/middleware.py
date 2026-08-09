@@ -12,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from .client import CoreVaultClient, HttpCoreVaultClient
-from .config import home_vault_url
+from .config import home_vault_url, public_scheme
 
 DEFAULT_SKIP_PATHS = frozenset({"/health", "/ready", "/version"})
 DEFAULT_SKIP_PREFIXES = ("/static/", "/shared-ui/")
@@ -55,7 +55,13 @@ class SharedSessionMiddleware:
             state["household_allow_member_edit"] = identity.household_allow_member_edit
             await self.app(scope, receive, send)
             return
-        destination = f"{request.url.scheme}://{request.url.netloc}{path}"
+        # Not request.url.scheme: Tailscale Serve terminates TLS externally
+        # and forwards plain HTTP to this container, so the request the app
+        # sees is always "http" even when the client used https. Using that
+        # here would send the post-login redirect into this app's
+        # HTTPS-only public listener, which rejects it with "Client sent an
+        # HTTP request to an HTTPS server."
+        destination = f"{public_scheme()}://{request.url.netloc}{path}"
         if request.url.query:
             destination += f"?{request.url.query}"
         response = RedirectResponse(
