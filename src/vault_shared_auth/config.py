@@ -17,19 +17,24 @@ def core_vault_url(default: str = "http://127.0.0.1:8100") -> str:
     return os.getenv("CORE_VAULT_URL", default).rstrip("/")
 
 
-def home_vault_url() -> str:
-    """Resolve home-vault's public URL for cross-vault redirects (login, etc).
+def public_scheme() -> str:
+    """Scheme this app's own public-facing origin uses.
 
     VAULT_PUBLIC_SCHEME is an optional override. Left unset, the scheme is
     derived from VAULT_PUBLIC_HOST: a Tailscale MagicDNS name (*.ts.net) is
     only ever reachable through the tailnet's TLS-terminated serve/Funnel
-    ports, so defaulting to "http" there sends the redirect into an
+    ports, so defaulting to "http" there sends a redirect into an
     HTTPS-only listener, which rejects it with "Client sent an HTTP request
     to an HTTPS server." A bare IP or localhost (local dev) still defaults
     to http.
     """
     host = os.getenv("VAULT_PUBLIC_HOST", "100.104.3.103")
-    scheme = os.getenv(
+    return os.getenv(
         "VAULT_PUBLIC_SCHEME", "https" if host.endswith(".ts.net") else "http"
     )
-    return f"{scheme}://{host}:8080"
+
+
+def home_vault_url() -> str:
+    """Resolve home-vault's public URL for cross-vault redirects (login, etc)."""
+    host = os.getenv("VAULT_PUBLIC_HOST", "100.104.3.103")
+    return f"{public_scheme()}://{host}:8080"

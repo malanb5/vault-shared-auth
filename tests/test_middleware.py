@@ -68,6 +68,25 @@ def test_populates_request_state_when_authenticated(monkeypatch):
     assert body["household_role"] == "admin"
 
 
+def test_redirect_destination_uses_public_scheme_not_request_scheme(monkeypatch):
+    # Tailscale Serve terminates TLS externally and forwards plain HTTP to
+    # the app, so the request this middleware sees is always "http" even
+    # when the client used https. The "next" destination it builds must
+    # still come out https, or the post-login redirect lands on this app's
+    # HTTPS-only public listener as plaintext and gets rejected with
+    # "Client sent an HTTP request to an HTTPS server."
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    monkeypatch.setenv("VAULT_PUBLIC_HOST", "mattdesktop.tail5510ea.ts.net")
+    monkeypatch.setenv("VAULT_PUBLIC_SCHEME", "https")
+    client = TestClient(_build_app(None), follow_redirects=False)
+    response = client.get(
+        "/whoami", headers={"host": "mattdesktop.tail5510ea.ts.net:8771"}
+    )
+    assert response.status_code == 303
+    location = response.headers["location"]
+    assert "next=https%3A%2F%2Fmattdesktop.tail5510ea.ts.net%3A8771" in location
+
+
 def test_noop_when_core_vault_url_unset(monkeypatch):
     monkeypatch.delenv("CORE_VAULT_URL", raising=False)
     client = TestClient(_build_app(None))
