@@ -35,6 +35,16 @@ def public_scheme() -> str:
 
 
 def home_vault_url() -> str:
-    """Resolve home-vault's public URL for cross-vault redirects (login, etc)."""
+    """Resolve home-vault's public URL for cross-vault redirects (login, etc).
+
+    HOME_VAULT_PUBLIC_URL takes priority when set: staging deployments run
+    home-vault on a different public port than production (e.g. 18080 vs
+    8080), so hardcoding 8080 sends a staging app's login redirect to
+    production's home-vault -- a different origin the browser's fetch()
+    can't follow, surfacing as a bare "Failed to fetch" in the caller.
+    """
+    override = os.getenv("HOME_VAULT_PUBLIC_URL")
+    if override:
+        return override.rstrip("/")
     host = os.getenv("VAULT_PUBLIC_HOST", "100.104.3.103")
     return f"{public_scheme()}://{host}:8080"

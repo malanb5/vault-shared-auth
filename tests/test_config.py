@@ -34,3 +34,11 @@ def test_home_vault_url_respects_explicit_scheme_override(monkeypatch):
     monkeypatch.setenv("VAULT_PUBLIC_HOST", "mattdesktop.tail5510ea.ts.net")
     monkeypatch.setenv("VAULT_PUBLIC_SCHEME", "http")
     assert home_vault_url() == "http://mattdesktop.tail5510ea.ts.net:8080"
+
+
+def test_home_vault_url_prefers_public_url_override(monkeypatch):
+    monkeypatch.setenv("VAULT_PUBLIC_HOST", "mattdesktop.tail5510ea.ts.net")
+    monkeypatch.setenv(
+        "HOME_VAULT_PUBLIC_URL", "https://mattdesktop.tail5510ea.ts.net:18080"
+    )
+    assert home_vault_url() == "https://mattdesktop.tail5510ea.ts.net:18080"

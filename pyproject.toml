@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "vault-shared-auth"
-version = "0.5.3"
+version = "0.6.1"
 description = "Shared core-vault SSO session client and ASGI middleware for vault-workspace apps."
 requires-python = ">=3.11"
 dependencies = [
