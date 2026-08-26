@@ -12,7 +12,7 @@ from fastapi import Request
 from fastapi.responses import RedirectResponse
 
 from .client import CoreVaultClient, HttpCoreVaultClient
-from .config import home_vault_url, public_scheme
+from .config import home_vault_url, public_scheme, session_cookie_name
 
 DEFAULT_SKIP_PATHS = frozenset({"/health", "/ready", "/version"})
 DEFAULT_SKIP_PREFIXES = ("/static/", "/shared-ui/")
@@ -44,7 +44,7 @@ class SharedSessionMiddleware:
         if path in self._skip_paths or path.startswith(self._skip_prefixes):
             await self.app(scope, receive, send)
             return
-        raw_session = request.cookies.get("context_vault_session")
+        raw_session = request.cookies.get(session_cookie_name())
         identity = await self._client.verify_session(cookie=raw_session)
         if identity:
             state = scope.setdefault("state", {})

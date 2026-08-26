@@ -10,7 +10,7 @@ from uuid import UUID
 
 import httpx
 
-from .config import core_vault_url
+from .config import core_vault_url, session_cookie_name
 
 
 @dataclass(frozen=True)
@@ -49,7 +49,7 @@ class HttpCoreVaultClient:
         try:
             response = await self._client.get(
                 "/auth/session",
-                cookies={"context_vault_session": cookie} if cookie else None,
+                cookies={session_cookie_name(): cookie} if cookie else None,
                 headers={"Authorization": f"Bearer {bearer}"} if bearer else None,
             )
         except httpx.HTTPError:

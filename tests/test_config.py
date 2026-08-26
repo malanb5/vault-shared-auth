@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from vault_shared_auth.config import core_vault_url, home_vault_url
+from vault_shared_auth.config import core_vault_url, home_vault_url, session_cookie_name
 
 
 def test_core_vault_url_default(monkeypatch):
@@ -42,3 +42,13 @@ def test_home_vault_url_prefers_public_url_override(monkeypatch):
         "HOME_VAULT_PUBLIC_URL", "https://mattdesktop.tail5510ea.ts.net:18080"
     )
     assert home_vault_url() == "https://mattdesktop.tail5510ea.ts.net:18080"
+
+
+def test_session_cookie_name_default(monkeypatch):
+    monkeypatch.delenv("VAULT_ENV", raising=False)
+    assert session_cookie_name() == "context_vault_session"
+
+
+def test_session_cookie_name_namespaced_per_environment(monkeypatch):
+    monkeypatch.setenv("VAULT_ENV", "staging")
+    assert session_cookie_name() == "context_vault_session_staging"

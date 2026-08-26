@@ -34,6 +34,20 @@ def public_scheme() -> str:
     )
 
 
+def session_cookie_name() -> str:
+    """Name of the shared SSO session cookie.
+
+    Prod and staging share a hostname and cookies aren't port-scoped, so a
+    plain "context_vault_session" cookie minted by one environment's
+    home-vault gets presented to the other environment's apps too --
+    those verify it against a core-vault that has never issued it, which
+    always fails closed (looks identical to "not logged in"). Suffixing
+    the name by VAULT_ENV keeps the two session spaces from colliding.
+    """
+    env = os.getenv("VAULT_ENV", "prod")
+    return "context_vault_session" if env == "prod" else f"context_vault_session_{env}"
+
+
 def home_vault_url() -> str:
     """Resolve home-vault's public URL for cross-vault redirects (login, etc).
 
