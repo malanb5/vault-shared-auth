@@ -86,6 +86,7 @@ def provider(storage):
 
 
 @pytest.mark.asyncio
+# AC: shared-oauth-helper-added
 async def test_authorize_falls_back_to_client_scope_when_request_omits_scope(provider, storage):
     """Pins the claude.ai-connector fallback: an /authorize request with no
     explicit scope must not issue a scopeless flow."""
@@ -105,6 +106,7 @@ async def test_authorize_falls_back_to_client_scope_when_request_omits_scope(pro
 
 
 @pytest.mark.asyncio
+# AC: shared-oauth-helper-added
 async def test_full_authorization_code_flow_issues_working_access_token(provider, storage):
     client = _client()
     await storage.register_client(client)
@@ -213,6 +215,7 @@ async def test_complete_flow_omits_iss_by_default(storage):
 
 
 @pytest.mark.asyncio
+# AC: shared-oauth-helper-added
 async def test_refresh_token_flow_does_not_carry_extra_claims_forward(provider, storage):
     client = _client()
     await storage.register_client(client)

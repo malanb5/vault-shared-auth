@@ -24,6 +24,7 @@ def test_public_host_and_origin_http_scheme():
     assert origin == "http://127.0.0.1:8772"
 
 
+# AC: shared-oauth-helper-added
 def test_remote_mcp_transport_security_allowlists_issuer_host_only():
     """Pins the Tailscale-Funnel DNS-rebinding host-allowlist workaround:
     FastMCP only auto-enables its DNS-rebinding Host/Origin allowlist for
@@ -42,6 +43,7 @@ def test_remote_mcp_transport_security_allowlists_issuer_host_only():
     assert settings.allowed_origins == ["https://vault-nutrition.ts.net:8443"]
 
 
+# AC: shared-oauth-helper-added
 def test_remote_mcp_transport_security_does_not_allowlist_other_hosts():
     settings = remote_mcp_transport_security("https://vault-nutrition.ts.net:8443")
 
@@ -77,6 +79,7 @@ async def _run(app, scope=None):
 
 
 @pytest.mark.asyncio
+# AC: shared-oauth-helper-added
 async def test_canonicalize_rewrites_bare_authority_urls():
     inner = _RecordingAsgiApp(
         200,
