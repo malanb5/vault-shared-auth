@@ -29,6 +29,36 @@ top-level `AGENTS.md` for why the exception is scoped to this package only.
   `household_allow_member_edit`, and redirects unauthenticated browser
   requests to home-vault's login page. A no-op when `CORE_VAULT_URL` is
   unset, so app test suites run with auth disabled without mocking.
+- `InternalMcpAuthMiddleware` / `current_internal_identity()` — the trust
+  boundary for assistant-vault's direct, non-OAuth calls to a vault app's
+  MCP tools over the private `vault-backend` docker network. Rejects any
+  request that doesn't carry the `ASSISTANT_VAULT_SHARED_SECRET` bearer
+  token and an `X-Vault-Owner-Id` header; on success, makes
+  `(owner_id, household_id)` available via `current_internal_identity()`
+  for the lifetime of the request.
+
+## Internal-MCP-call usage
+
+```python
+from fastapi import FastAPI
+from vault_shared_auth import InternalMcpAuthMiddleware, current_internal_identity
+
+app = FastAPI()
+app.add_middleware(InternalMcpAuthMiddleware)
+
+
+def _owner_id() -> str:
+    identity = current_internal_identity()
+    if identity:
+        return identity[0]
+    ...  # fall back to the OAuth access token / stdio env var
+```
+
+The secret env var and header names default to
+`ASSISTANT_VAULT_SHARED_SECRET` / `X-Vault-Owner-Id` / `X-Vault-Household-Id`
+(what every consumer already used) but can be overridden via constructor
+keyword arguments (`secret_env_var=`, `owner_header=`, `household_header=`)
+for a consumer that genuinely needs different ones.
 
 ## Usage
 
