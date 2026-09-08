@@ -216,7 +216,7 @@ async def test_complete_flow_omits_iss_by_default(storage):
 
 @pytest.mark.asyncio
 # AC: shared-oauth-helper-added
-async def test_refresh_token_flow_does_not_carry_extra_claims_forward(provider, storage):
+async def test_refresh_token_flow_carries_extra_claims_forward(provider, storage):
     client = _client()
     await storage.register_client(client)
     params = AuthorizationParams(
@@ -240,11 +240,21 @@ async def test_refresh_token_flow_does_not_carry_extra_claims_forward(provider, 
     assert loaded_refresh is not None
     refreshed = await provider.exchange_refresh_token(client, loaded_refresh, [])
 
+    # A refresh carries the original extra claims forward -- see
+    # exchange_refresh_token()'s docstring for the staleness tradeoff.
     refreshed_access = await provider.load_access_token(refreshed.access_token)
-    assert refreshed_access.claims == {}
+    assert refreshed_access.claims == {"household_id": "hh-1"}
 
     # The old refresh token is revoked once exchanged.
     assert await provider.load_refresh_token(client, original_token.refresh_token) is None
+
+    # And the claims keep carrying forward across a second refresh in the
+    # same chain, not just the first hop.
+    loaded_refresh_2 = await provider.load_refresh_token(client, refreshed.refresh_token)
+    assert loaded_refresh_2 is not None
+    refreshed_2 = await provider.exchange_refresh_token(client, loaded_refresh_2, [])
+    refreshed_access_2 = await provider.load_access_token(refreshed_2.access_token)
+    assert refreshed_access_2.claims == {"household_id": "hh-1"}
 
 
 @pytest.mark.asyncio

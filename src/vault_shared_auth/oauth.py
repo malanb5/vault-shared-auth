@@ -239,22 +239,30 @@ class OAuthProviderBase(OAuthAuthorizationServerProvider):
         refresh_token: RefreshToken,
         scopes: list[str],
     ) -> OAuthToken:
-        """Refreshing deliberately does not carry the previous token's extra
-        claims forward -- the new access token's claims come back empty
-        even if the token being refreshed had them. That context can change
-        more often than identity itself (a household membership changes, a
-        collection is deleted), and this provider has no way to re-verify
-        it against the identity provider at refresh time (no bearer token
-        or picker state is retained past the original login). A client
-        that needs current context after a refresh must do a fresh login.
+        """Refreshing carries the previous token's extra claims forward --
+        the new access token's claims are copied from the refresh-token row
+        being exchanged, which itself was seeded from the original
+        authorization code and re-copied on every prior refresh in the
+        chain. This trades correctness for cheapness deliberately: this
+        provider has no way to re-verify context (household membership,
+        collection existence) against the identity provider at refresh time
+        (no bearer token or picker state is retained past the original
+        login), so a claim that changed or was revoked after login can
+        outlive that change until the client does a fresh login. A consumer
+        whose context can go stale in ways that matter (e.g. a collection
+        deleted mid-session) must re-resolve it per call rather than trust
+        these claims blindly -- see the consuming app's own tools.
         """
-        await self._storage.revoke_by_hash(hash_token(refresh_token.token))
+        token_hash = hash_token(refresh_token.token)
+        row = await self._storage.get_refresh_token(token_hash)
+        extra = dict((row or {}).get("extra") or {})
+        await self._storage.revoke_by_hash(token_hash)
         return await self._issue_tokens(
             client_id=client.client_id,
             subject_user_id=refresh_token.subject,
             scopes=scopes or refresh_token.scopes,
             resource=None,
-            extra={},
+            extra=extra,
         )
 
     async def load_access_token(self, token: str) -> AccessToken | None:
@@ -312,7 +320,10 @@ class OAuthProviderBase(OAuthAuthorizationServerProvider):
                 "scope": scope_str,
                 "resource": resource,
                 "expires_at": None,
-                "extra": {},
+                # Carried forward so a later exchange_refresh_token() can
+                # copy it into the next access token -- see that method's
+                # docstring for the staleness tradeoff this implies.
+                "extra": extra,
             },
         )
         return OAuthToken(
