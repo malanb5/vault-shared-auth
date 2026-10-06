@@ -92,3 +92,107 @@ def test_noop_when_core_vault_url_unset(monkeypatch):
     client = TestClient(_build_app(None))
     response = client.get("/whoami")
     assert response.status_code == 200
+
+
+class _GatedFakeClient:
+    def __init__(self, outcome) -> None:
+        self.outcome = outcome
+        self.calls: list[dict] = []
+
+    async def verify_session(self, *, cookie=None, bearer=None, vault=None, activity=False):
+        self.calls.append({"cookie": cookie, "vault": vault, "activity": activity})
+        if isinstance(self.outcome, Exception):
+            raise self.outcome
+        return self.outcome if cookie else None
+
+
+def _build_gated_app(client) -> FastAPI:
+    app = FastAPI()
+    app.add_middleware(SharedSessionMiddleware, client=client, vault="video-vault")
+
+    @app.get("/health")
+    def health():
+        return {"ok": True}
+
+    @app.api_route("/page", methods=["GET", "POST", "HEAD"])
+    def page(request: Request):
+        return {"owner_email": request.state.owner_email}
+
+    return app
+
+
+_SESSION = SessionInfo(user_id=uuid4(), email="owner@example.com")
+
+
+# AC: vv-gate-other-vaults-unchanged
+def test_ungated_middleware_keeps_the_legacy_call_shape(monkeypatch):
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    # _FakeClient only accepts cookie/bearer: an ungated vault must never
+    # pass vault=/activity=, so legacy consumers' fakes keep working.
+    client = TestClient(_build_app(_SESSION))
+    client.cookies.set("context_vault_session", "abc")
+    assert client.get("/whoami").status_code == 200
+
+
+# AC: vv-gate-allowlist
+def test_gated_forbidden_account_gets_403_not_a_login_loop(monkeypatch):
+    from vault_shared_auth import VaultAccessDenied
+
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    monkeypatch.setenv("HOME_VAULT_PUBLIC_URL", "https://home.example.test")
+    fake = _GatedFakeClient(VaultAccessDenied("video-vault"))
+    client = TestClient(_build_gated_app(fake), follow_redirects=False)
+    client.cookies.set("context_vault_session", "abc")
+    response = client.get("/page")
+    assert response.status_code == 403
+    assert "location" not in response.headers
+    assert "https://home.example.test" in response.text
+    assert "owner@example.com" not in response.text
+
+
+# AC: vv-gate-login-redirect
+def test_gated_idle_expired_session_redirects_to_login_with_destination(monkeypatch):
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    monkeypatch.setenv("HOME_VAULT_PUBLIC_URL", "https://home.example.test")
+    fake = _GatedFakeClient(None)
+    client = TestClient(_build_gated_app(fake), follow_redirects=False)
+    client.cookies.set("context_vault_session", "abc")
+    response = client.get("/page?x=1")
+    assert response.status_code == 303
+    assert response.headers["location"].startswith("https://home.example.test/login?next=")
+    assert "%2Fpage%3Fx%3D1" in response.headers["location"]
+
+
+# AC: vv-gate-exempt-paths
+def test_gated_health_is_exempt(monkeypatch):
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    fake = _GatedFakeClient(None)
+    client = TestClient(_build_gated_app(fake))
+    assert client.get("/health").status_code == 200
+    assert fake.calls == []
+
+
+# AC: vv-gate-idle-timeout
+@pytest.mark.parametrize(
+    "method,headers,expected",
+    [
+        ("GET", {}, True),
+        ("GET", {"Sec-Fetch-Mode": "navigate"}, True),
+        ("POST", {"Sec-Fetch-Mode": "navigate"}, True),
+        ("GET", {"Sec-Fetch-Mode": "cors"}, False),
+        ("GET", {"Sec-Fetch-Mode": "same-origin"}, False),
+        ("GET", {"Sec-Fetch-Mode": "no-cors"}, False),
+        ("GET", {"X-Vault-Background": "1"}, False),
+        ("GET", {"Sec-Fetch-Mode": "navigate", "Sec-Purpose": "prefetch"}, False),
+        ("GET", {"Purpose": "prefetch"}, False),
+        ("HEAD", {}, False),
+    ],
+)
+def test_gated_activity_excludes_background_requests(monkeypatch, method, headers, expected):
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    fake = _GatedFakeClient(_SESSION)
+    client = TestClient(_build_gated_app(fake))
+    client.cookies.set("context_vault_session", "abc")
+    response = client.request(method, "/page", headers=headers)
+    assert response.status_code == 200
+    assert fake.calls == [{"cookie": "abc", "vault": "video-vault", "activity": expected}]

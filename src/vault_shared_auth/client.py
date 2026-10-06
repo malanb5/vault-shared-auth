@@ -22,9 +22,23 @@ class SessionInfo:
     household_allow_member_edit: bool | None = None
 
 
+class VaultAccessDenied(Exception):
+    """core-vault authenticated the session but refused it for the gated
+    vault named in ``verify_session(vault=...)`` (account not on that
+    vault's allowlist, or the vault has no access policy at all). Only ever
+    raised when the caller opts in with ``vault``; a plain session check
+    keeps returning ``None`` for every failure, exactly as before.
+    """
+
+
 class CoreVaultClient(Protocol):
     async def verify_session(
-        self, *, cookie: str | None = None, bearer: str | None = None
+        self,
+        *,
+        cookie: str | None = None,
+        bearer: str | None = None,
+        vault: str | None = None,
+        activity: bool = False,
     ) -> SessionInfo | None: ...
 
 
@@ -42,18 +56,34 @@ class HttpCoreVaultClient:
         self._client = httpx.AsyncClient(base_url=base_url or core_vault_url(), timeout=timeout)
 
     async def verify_session(
-        self, *, cookie: str | None = None, bearer: str | None = None
+        self,
+        *,
+        cookie: str | None = None,
+        bearer: str | None = None,
+        vault: str | None = None,
+        activity: bool = False,
     ) -> SessionInfo | None:
+        """Verify a session with core-vault.
+
+        ``vault`` opts into core-vault's per-vault gate (allowlist plus
+        server-side idle timeout); ``activity`` says whether this request is
+        user activity that renews the idle window. Without ``vault`` the
+        request is byte-for-byte the pre-gate ``GET /auth/session``.
+        """
         if not cookie and not bearer:
             return None
+        params = {"vault": vault, "activity": "true" if activity else "false"} if vault else None
         try:
             response = await self._client.get(
                 "/auth/session",
+                params=params,
                 cookies={session_cookie_name(): cookie} if cookie else None,
                 headers={"Authorization": f"Bearer {bearer}"} if bearer else None,
             )
         except httpx.HTTPError:
             return None
+        if vault and response.status_code == 403:
+            raise VaultAccessDenied(vault)
         if response.status_code != 200:
             return None
         body = response.json()

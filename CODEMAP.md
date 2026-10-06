@@ -5,7 +5,7 @@ Shared SSO/auth library (not an app) used by every vault: core-vault session che
 - No server/CLI; import `vault_shared_auth` (public API in `src/vault_shared_auth/__init__.py` `__all__`)
 
 ## Modules
-- `middleware.py`: `SharedSessionMiddleware` (cookie -> core-vault verify -> `request.state`; else redirect to home-vault `/login?next=`), `DEFAULT_SKIP_PREFIXES`
+- `middleware.py`: `SharedSessionMiddleware` (cookie -> core-vault verify -> `request.state`; else redirect to home-vault `/login?next=`; opt-in `vault=` gate: 403 if not entitled), `is_user_activity`
 - `client.py`: `SessionInfo`, `CoreVaultClient` Protocol, `HttpCoreVaultClient`, `get_core_vault_client`
 - `config.py`: `core_vault_url`, `public_scheme`, `session_cookie_name`, `home_vault_url`
 - `internal_auth.py`: `InternalMcpAuthMiddleware`, `current_internal_identity` (assistant-vault `/mcp-internal`)

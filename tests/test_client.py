@@ -105,3 +105,57 @@ def _mock_async_client(handler):
         return real_async_client(*args, **kwargs)
 
     return factory
+
+
+# AC: vv-gate-other-vaults-unchanged
+@pytest.mark.asyncio
+async def test_plain_verify_session_sends_no_gate_params(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.query == b""
+        return httpx.Response(403)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(handler))
+    # Without vault=, a 403 is just "no session" -- never an exception.
+    assert await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(cookie="abc") is None
+
+
+# AC: vv-gate-allowlist
+@pytest.mark.asyncio
+@pytest.mark.parametrize("activity,expected", [(True, "true"), (False, "false")])
+async def test_gated_verify_session_passes_vault_and_activity(monkeypatch, activity, expected):
+    user_id = str(uuid4())
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        assert request.url.params["vault"] == "video-vault"
+        assert request.url.params["activity"] == expected
+        return httpx.Response(200, json={"user_id": user_id, "email": "ok@example.com"})
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(handler))
+    result = await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
+        cookie="abc", vault="video-vault", activity=activity
+    )
+    assert result is not None and str(result.user_id) == user_id
+
+
+# AC: vv-gate-allowlist
+@pytest.mark.asyncio
+async def test_gated_verify_session_raises_on_forbidden(monkeypatch):
+    from vault_shared_auth import VaultAccessDenied
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(lambda request: httpx.Response(403)))
+    with pytest.raises(VaultAccessDenied):
+        await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
+            cookie="abc", vault="video-vault", activity=True
+        )
+
+
+# AC: vv-gate-idle-timeout
+@pytest.mark.asyncio
+async def test_gated_verify_session_idle_expiry_is_no_session(monkeypatch):
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(lambda request: httpx.Response(401)))
+    assert (
+        await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
+            cookie="abc", vault="video-vault", activity=True
+        )
+        is None
+    )
