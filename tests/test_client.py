@@ -182,3 +182,20 @@ async def test_gated_200_without_gate_confirmation_fails_closed(monkeypatch, gat
         await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
             cookie="abc", vault="video-vault", activity=True
         )
+
+
+# AC: vv-gate-backend-only
+@pytest.mark.asyncio
+async def test_gated_call_carries_no_browser_fetch_metadata(monkeypatch):
+    def handler(request: httpx.Request) -> httpx.Response:
+        for header in ("sec-fetch-site", "sec-fetch-mode", "sec-fetch-dest", "sec-fetch-user"):
+            assert header not in request.headers
+        return httpx.Response(
+            200, json={"user_id": str(uuid4()), "email": "ok@example.com"}, headers={"X-Vault-Gate": "video-vault"}
+        )
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(handler))
+    result = await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
+        cookie="abc", vault="video-vault", activity=True
+    )
+    assert result is not None

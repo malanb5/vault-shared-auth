@@ -196,3 +196,74 @@ def test_gated_activity_excludes_background_requests(monkeypatch, method, header
     response = client.request(method, "/page", headers=headers)
     assert response.status_code == 200
     assert fake.calls == [{"cookie": "abc", "vault": "video-vault", "activity": expected}]
+
+
+# AC: vv-gate-fail-closed-config
+def test_gated_vault_without_core_vault_url_fails_closed(monkeypatch):
+    monkeypatch.delenv("CORE_VAULT_URL", raising=False)
+    monkeypatch.delenv("VAULT_SHARED_AUTH_DISABLED", raising=False)
+    fake = _GatedFakeClient(_SESSION)
+    client = TestClient(_build_gated_app(fake), follow_redirects=False)
+    response = client.get("/page")
+    assert response.status_code == 503
+    assert client.post("/page").status_code == 503
+    assert client.get("/health").status_code == 200
+    assert fake.calls == []
+
+
+# AC: vv-gate-fail-closed-config
+def test_gated_vault_explicit_test_opt_out(monkeypatch):
+    monkeypatch.delenv("CORE_VAULT_URL", raising=False)
+    monkeypatch.setenv("VAULT_SHARED_AUTH_DISABLED", "1")
+    client = TestClient(_build_gated_app(_GatedFakeClient(_SESSION)), follow_redirects=False)
+    # Auth skipped entirely (no request.state identity), as for ungated vaults.
+    assert client.get("/health").status_code == 200
+
+
+# AC: vv-gate-other-vaults-unchanged
+def test_ungated_vault_without_core_vault_url_is_still_a_no_op(monkeypatch):
+    monkeypatch.delenv("CORE_VAULT_URL", raising=False)
+    monkeypatch.delenv("VAULT_SHARED_AUTH_DISABLED", raising=False)
+    client = TestClient(_build_app(None))
+    assert client.get("/whoami").status_code == 200
+
+
+# AC: vv-gate-login-redirect
+@pytest.mark.parametrize(
+    "referer,expected_target",
+    [
+        ("http://testserver/manage/videos/1/edit?x=1", "/manage/videos/1/edit?x=1"),
+        ("https://testserver/manage/people", "/manage/people"),
+        ("https://evil.example/manage/videos", "/"),
+        ("http://testserver//evil.example/x", "/"),
+        ("javascript:alert(1)", "/"),
+        (None, "/"),
+    ],
+)
+def test_gated_idle_expired_post_returns_to_referer_or_root(monkeypatch, referer, expected_target):
+    from urllib.parse import quote
+
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    monkeypatch.setenv("HOME_VAULT_PUBLIC_URL", "https://home.example.test")
+    monkeypatch.setenv("VAULT_PUBLIC_SCHEME", "https")
+    client = TestClient(_build_gated_app(_GatedFakeClient(None)), follow_redirects=False)
+    client.cookies.set("context_vault_session", "abc")
+    headers = {"Referer": referer} if referer else {}
+    response = client.post("/page", headers=headers)
+    assert response.status_code == 303
+    destination = quote(f"https://testserver{expected_target}", safe="")
+    assert response.headers["location"] == f"https://home.example.test/login?next={destination}"
+
+
+# AC: vv-gate-other-vaults-unchanged
+def test_ungated_post_redirect_keeps_the_post_url(monkeypatch):
+    monkeypatch.setenv("CORE_VAULT_URL", "http://core-vault.test")
+    app = _build_app(None)
+
+    @app.post("/submit")
+    def submit():
+        return {}
+
+    client = TestClient(app, follow_redirects=False)
+    response = client.post("/submit", headers={"Referer": "http://testserver/elsewhere"})
+    assert "%2Fsubmit" in response.headers["location"]
