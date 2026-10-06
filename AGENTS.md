@@ -1,5 +1,7 @@
 # vault-shared-auth contribution rules
 
+Read [CODEMAP.md](CODEMAP.md) before searching the code.
+
 This package sits on the auth trust boundary of every consuming vault app
 (`context-vault`, `shoe-vault`, `movie-vault`, `nutrition-vault`,
 `household-vault`). A bug here is a simultaneous vulnerability in all of
