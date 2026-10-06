@@ -128,7 +128,11 @@ async def test_gated_verify_session_passes_vault_and_activity(monkeypatch, activ
     def handler(request: httpx.Request) -> httpx.Response:
         assert request.url.params["vault"] == "video-vault"
         assert request.url.params["activity"] == expected
-        return httpx.Response(200, json={"user_id": user_id, "email": "ok@example.com"})
+        return httpx.Response(
+            200,
+            json={"user_id": user_id, "email": "ok@example.com"},
+            headers={"X-Vault-Gate": "video-vault"},
+        )
 
     monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(handler))
     result = await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
@@ -159,3 +163,22 @@ async def test_gated_verify_session_idle_expiry_is_no_session(monkeypatch):
         )
         is None
     )
+
+
+# AC: vv-gate-allowlist
+@pytest.mark.asyncio
+@pytest.mark.parametrize("gate_header", [None, "other-vault", ""])
+async def test_gated_200_without_gate_confirmation_fails_closed(monkeypatch, gate_header):
+    """An older core-vault ignores vault= and returns a plain 200."""
+    from vault_shared_auth import VaultAccessDenied
+
+    headers = {} if gate_header is None else {"X-Vault-Gate": gate_header}
+
+    def handler(request: httpx.Request) -> httpx.Response:
+        return httpx.Response(200, json={"user_id": str(uuid4()), "email": "x@example.com"}, headers=headers)
+
+    monkeypatch.setattr(httpx, "AsyncClient", _mock_async_client(handler))
+    with pytest.raises(VaultAccessDenied):
+        await HttpCoreVaultClient(base_url="http://core-vault.test").verify_session(
+            cookie="abc", vault="video-vault", activity=True
+        )

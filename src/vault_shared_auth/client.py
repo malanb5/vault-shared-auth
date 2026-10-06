@@ -22,6 +22,11 @@ class SessionInfo:
     household_allow_member_edit: bool | None = None
 
 
+# core-vault echoes the gated vault's name here once it has enforced that
+# vault's policy; a gated 200 without it is treated as a denial (fail closed).
+VAULT_GATE_HEADER = "X-Vault-Gate"
+
+
 class VaultAccessDenied(Exception):
     """core-vault authenticated the session but refused it for the gated
     vault named in ``verify_session(vault=...)`` (account not on that
@@ -86,6 +91,10 @@ class HttpCoreVaultClient:
             raise VaultAccessDenied(vault)
         if response.status_code != 200:
             return None
+        if vault and response.headers.get(VAULT_GATE_HEADER) != vault:
+            # A core-vault without the gate ignores vault= and answers a
+            # plain 200; refuse it rather than silently skip the gate.
+            raise VaultAccessDenied(vault)
         body = response.json()
         user_id = body.get("user_id")
         email = body.get("email")
